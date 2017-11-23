@@ -1067,71 +1067,74 @@ abstract class Presenter extends Control implements Application\IPresenter
 	/**
 	 * Saves state information for all subcomponents to $this->globalState.
 	 */
-	protected function getGlobalState($forClass = null): array
-	{
-		$sinces = &$this->globalStateSinces;
+	protected function getGlobalState($forClass = null) : array
+    {
+        $state = [];
 
-		if ($this->globalState === null) {
-			$state = [];
-			foreach ($this->globalParams as $id => $params) {
-				$prefix = $id . self::NAME_SEPARATOR;
-				foreach ($params as $key => $val) {
-					$state[$prefix . $key] = $val;
-				}
-			}
-			$this->saveState($state, $forClass ? new ComponentReflection($forClass) : null);
+        if ($forClass == null) {
+            $since = null;
+            foreach ($state as $key => $foo) {
+                if (!isset($sinces[$key])) {
+                    $x = strpos($key, self::NAME_SEPARATOR);
+                    $x = $x === false ? $key : substr($key, 0, $x);
+                    $sinces[$key] = isset($sinces[$x]) ? $sinces[$x] : false;
+                }
+                if ($since !== $sinces[$key]) {
+                    $since = $sinces[$key];
+                    $ok = $since && is_a($forClass, $since, true);
+                }
+                if (!$ok) {
+                    unset($state[$key]);
+                }
+            }
+        }
 
-			if ($sinces === null) {
-				$sinces = [];
-				foreach ($this->getReflection()->getPersistentParams() as $name => $meta) {
-					$sinces[$name] = $meta['since'];
-				}
-			}
+        foreach ($this->globalParams as $id => $params) {
+                $prefix = $id . self::NAME_SEPARATOR;
+                foreach ($params as $key => $val) {
+                    $state[$prefix . $key] = $val;
+                }
+            }
+            $this->saveState($state, $forClass ? new ComponentReflection($forClass) : null);
+            $this->saveStatusForClass();
 
-			$components = $this->getReflection()->getPersistentComponents();
-			$iterator = $this->getComponents(true);
+            return $state;
+    }
 
-			foreach ($iterator as $name => $component) {
-				if ($iterator->getDepth() === 0) {
-					// counts with Nette\Application\RecursiveIteratorIterator::SELF_FIRST
-					$since = $components[$name]['since'] ?? false; // false = nonpersistent
-				}
-				if (!$component instanceof IStatePersistent) {
-					continue;
-				}
-				$prefix = $component->getUniqueId() . self::NAME_SEPARATOR;
-				$params = [];
-				$component->saveState($params);
-				foreach ($params as $key => $val) {
-					$state[$prefix . $key] = $val;
-					$sinces[$prefix . $key] = $since;
-				}
-			}
+    private function saveStatusForClass()
+    {
 
-		} else {
-			$state = $this->globalState;
-		}
+        $sinces = &$this->globalStateSinces;
 
-		if ($forClass !== null) {
-			$since = null;
-			foreach ($state as $key => $foo) {
-				if (!isset($sinces[$key])) {
-					$x = strpos($key, self::NAME_SEPARATOR);
-					$x = $x === false ? $key : substr($key, 0, $x);
-					$sinces[$key] = $sinces[$x] ?? false;
-				}
-				if ($since !== $sinces[$key]) {
-					$since = $sinces[$key];
-					$ok = $since && is_a($forClass, $since, true);
-				}
-				if (!$ok) {
-					unset($state[$key]);
-				}
-			}
-		}
+        if ($sinces === null) {
+            $sinces = [];
+            foreach ($this->getReflection()->getPersistentParams() as $name => $meta) {
+                $sinces[$name] = $meta['since'];
+            }
+        }
 
-		return $state;
-	}
+        $components = $this->getReflection()->getPersistentComponents();
+        $iterator = $this->getComponents(true);
+
+        foreach ($iterator as $name => $component) {
+            if ($iterator->getDepth() === 0) {
+                // counts with Nette\Application\RecursiveIteratorIterator::SELF_FIRST
+                $since = isset($components[$name]['since']) ? $components[$name]['since'] : false; // false = nonpersistent
+            }
+            if (!$component instanceof IStatePersistent) {
+                continue;
+            }
+            $prefix = $component->getUniqueId() . self::NAME_SEPARATOR;
+            $params = [];
+            $component->saveState($params);
+            foreach ($params as $key => $val) {
+                $state[$prefix . $key] = $val;
+                $sinces[$prefix . $key] = $since;
+            }
+        }
+        return $this->globalState;
+
+    }
 
 
 	/**
@@ -1151,7 +1154,6 @@ abstract class Presenter extends Control implements Application\IPresenter
 		$this->globalParams = [];
 		$this->globalState = $this->getGlobalState();
 	}
-
 
 	/**
 	 * Initializes $this->globalParams, $this->signal & $this->signalReceiver, $this->action, $this->view. Called by run().
